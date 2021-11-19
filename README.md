@@ -1,3 +1,3 @@
 # WR
 
-This is the most up-to-date version of the `WR` package.
+This is the development version of the `WR` package.
