@@ -1,0 +1,213 @@
+---
+title: "Tutorial II: Regression analysis of prioritized composite endpoints using the `WR` package"
+subtitle: "Application to the German Breast Cancer Study"
+author: "Mao, L. and Wang, T."
+date: "11/09/2021"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Tutorial II: Regression analysis of prioritized composite endpoints using the `WR` package}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+```{r, echo = FALSE, message = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+
+This is a self-contained, practical tutorial on the use of the `WR` package to fit a priority-adjusted
+(stratified) proportional win-fractions (PW) regression model for a composite endpoint consisting
+of death and non-fatal events. The model is a regression version of Pocock's
+two-sample win ratio (Pocock et al., 2012). The methodology is described in full
+detail and generality in Mao and Wang (2020) and Wang and Mao (2021+).
+
+## A summary of the (stratified) PW regression methodology
+
+Let $D$ denote the survival time, $T$ denote time to (the first) non-fatal,
+and $\boldsymbol Z$ denote a $p$-vector of covariates.
+The composite outcome is $\boldsymbol Y=(D, T)$ with $D$ prioritized over $T$.
+If the $i$ th and $j$ th patients are both followed up to time $t$,
+define
+$$\mathcal W(\boldsymbol Y_i, \boldsymbol Y_j)(t) = I(\mbox{subject $i$ wins over subject $j$ by $t$}) = I(D_j < D_i \wedge t) + I(D_i \wedge D_j > t, T_j < T_i \wedge t),$$
+where $a\wedge b=\min(a,b)$. Note that in defining the ''win indicator''
+$\mathcal W$ we have used the sequential-comparison algorithm of Pocock et al. (2012).
+
+
+Then, the covariate-specific win ratio curtailed at $t$ is
+\[WR(t;\boldsymbol Z_i, \boldsymbol Z_j):=\frac{E\{\mathcal W(\boldsymbol Y_i, \boldsymbol Y_j)(t)\mid \boldsymbol Z_i, \boldsymbol Z_j\}}{E\{\mathcal W(\boldsymbol Y_j, \boldsymbol Y_i)(t)\mid \boldsymbol Z_i, \boldsymbol Z_j\}}.\]
+For example, if subject $i$ is from the treatment arm with $\boldsymbol Z_i=1$
+and subject $j$ is from the treatment arm with $\boldsymbol Z_j=0$,
+then $WR(t;\boldsymbol Z_i, \boldsymbol Z_j)$ is precisely
+the estimand of Pocock's win ratio comparing the treatment to the control when 
+all subjects in both arms are followed to time $t$.
+
+
+The PW model specifies that
+\[\mbox{PW Model: }\hspace{3mm} WR(t;\boldsymbol Z_i, \boldsymbol Z_j)=\exp\{\boldsymbol\beta^{\rm T}(\boldsymbol Z_i -\boldsymbol Z_j)\}.\]
+Clearly, the PW model assumes that win ratio is invariant to the follow-up time (proportionality assumption).
+Under the model, the components of $\boldsymbol\beta$ can be interpreted as the log win ratios
+associated with unit increases in the corresponding covariates.
+Under the PW model, we can obtain consistent estimates for the parameter $\boldsymbol\beta$ 
+based on censored data regardless of distribution of the censoring time $C$ as long as
+\[(C\perp \boldsymbol Y)\mid \boldsymbol Z.\]
+
+When a certain covariate violate the proportionality assumption, the stratified PW model can be used in this scenario. Assume the stratification variable has $L$ levels. For all notation, we use subscripts $li$ and $lj$ to denote the corresponding values from subjects $i$ and $j$ in stratum $l = 1,\ldots,L$. A stratified proportional win-fractions model can be formulated as:
+\begin{equation*}
+\mathcal{R}\left(t \mid \boldsymbol{Z}_{l i}, \boldsymbol{Z}_{l j} ; \mathcal{W}\right) \equiv \frac{E\left\{\mathcal{W}(\boldsymbol{Y}_{li},\boldsymbol{Y}_{lj})(t) | \boldsymbol{Z}_{li}, \boldsymbol{Z}_{lj}\right\}}{E\left\{\mathcal{W}(\boldsymbol{Y}_{lj},\boldsymbol{Y}_{li})(t) | \boldsymbol{Z}_{li}, \boldsymbol{Z}_{lj}\right\}} =\exp \left\{\boldsymbol{\beta}^{\mathrm{T}}\left(\boldsymbol{Z}_{l i}-\boldsymbol{Z}_{l j}\right)\right\} \quad(l=1, \ldots, L).
+\end{equation*}
+
+The interpretation of $\boldsymbol\beta$  is the same as the PW model without stratification.
+
+## Input data and regression function
+The input data for analysis should be arranged in the "long format", with an `ID` vector
+containing unique patient-level identifiers. In addition, we need a `time` vector containing the event times and a `status` vector indicating the corresponding cause of the event. The vector `status`  should be coded as `1`=death; `2`=non-fatal event; `0`=censoring. In the case of recurrent non-fatal events, multiple rows with `status`=2 are allowed. However, by nature of the method, only time to the first episode will be used. Finally, we need a covariate matrix `Z` with the same row as `ID`.
+Each column of `Z` represents a covariate. All covariates need to be time-constant.
+
+The main function to fit the (stratified) PW model is `pwreg(ID, time, status, Z)` with arguments in specified formats as above. 
+The function returns an object of class `pwreg`
+with a `beta` vector for $\widehat{\boldsymbol\beta}$ 
+and a `Var` matrix for $\text{var}(\widehat{\boldsymbol\beta})$.
+For details, refer to documentation of the `WR` package.
+
+## An example: German Breast Cancer Study
+
+We consider a subset of the data from the German Breast Cancer study consisting of 686 patients with primary node positive breast cancer. The study was conducted between July 1984 to December 1989. The study objective was to assess the effectiveness of hormonal treatment with tamoxifen in addition to standard chemotherapy in reducing the cancer relapse and mortality of patients. The primary endpoint was tumor recurrence or death of a patient. 
+
+We first load the `WR` package and the analysis dataset `gbc`.
+```{r setup}
+library(WR)
+# source(here::here("R","functions.R"))
+# source(here::here("R","generic.R"))
+# gbc <- read.csv(here::here("BCdata", "gbc.txt"), sep="")
+head(gbc)
+```
+
+The variables' dictionary can be found in the documentation of the `WR` package. 
+The `grade` column in `gbc` is a factor. We create dummy variables for `grade`.
+
+```{r}
+grade_matrix <- model.matrix(~factor(grade),data=gbc)
+grade_df <- as.data.frame(grade_matrix[,-1])
+names(grade_df) <- c("grade2 vs grade1", "grade3 vs grade1")
+gbc <- cbind.data.frame(gbc[,-8], grade_df)
+```
+
+Next, we use the `pwreg()` function to fit the PW model with all covariates:
+```{r}
+# get the number of rows and number of covariates.
+nr <- nrow(gbc)
+p <- ncol(gbc)-3
+
+# extract ID, time, status and covariates matrix Z from the data.
+# note that: ID, time and status should be column vector.
+# covariates Z should be (nr, p) matrix.
+ID <- gbc[,"id"]
+time <- gbc[,"time"]
+status <- gbc[,"status"]
+Z <- as.matrix(gbc[,4:(3+p)],nr,p)
+
+
+# pass the parameters into the function
+pwreg.obj <- pwreg(ID=ID, time=time, status=status,  Z=Z)
+print(pwreg.obj)
+```
+
+The output consists of three parts. The first part presents some descriptive statistics
+on the proportions of win-loss status among all ${n\choose 2}=234,955$ pairs.
+According to the output, $6.5\%$ of them are determined by death; $50.5\%$
+by hospitalization, and the remaining $43.4\%$ are indeterminate.
+It also reports an overall (Wald) test with $p$-value <0.001, suggesting that, at the conventional 0.05 level,
+the 13 covariates are significantly associated with the composite outcome.
+
+The second part presents a table for the estimates and standard errors of the 
+regression coefficient, along with their corresponding $p$-value
+for testing the coefficient being zero.
+
+The third part is perhaps the most informative, tabulating the estimated win ratios
+(exponential of the regression coefficients) and their
+associated $95\%$ confidence intervals. 
+We can see that a patient in the treatment group is $55\%$ more likely to have a better
+priority-adjusted composite outcome than one in usual care and this difference is statistically significant. In addition, smaller tumor size, smaller number of nodes involved, smaller number of progesterone receptors, and tumor grade 1 are significantly associated with more favorable outcomes than otherwise.
+
+To assess the effect of tumor grade on the composite outcome, we test the null hypothesis
+\[H_0:\beta_8=\beta_9=0.\]
+We  conduct a 2-df Chi-square Wald test based on $(\widehat\beta_8,\widehat\beta_9)^{\rm T}$:
+```{r}
+#extract estimates of (\beta_8,\beta_9)
+beta <- matrix(pwreg.obj$beta[8:9])
+#extract estimated covariance matrix for (\beta_8,\beta_9)
+Sigma <- pwreg.obj$Var[8:9,8:9]
+#compute chisq statistic in quadratic form
+chistats <- t(beta) %*% solve(Sigma) %*% beta  
+
+#compare the Wald statistic with the reference
+# distribution of chisq(2) to obtain the p-value
+1 - pchisq(chistats, df=2)
+```
+The $p$-value is 0.010. So the overall effect of tumor grade on the composite outcome
+is significant.
+
+
+Then, we use the `score.proc()` function to plot the standardized score process for each covariate:
+
+```{r, fig.height = 7.5, fig.width=7.5}
+score.obj <- score.proc(pwreg.obj)
+print(score.obj)
+
+oldpar <- par(mfrow = par("mfrow"))
+par(mfrow = c(3,3))
+for(i in c(1:p)){
+  plot(score.obj, k = i)
+  abline(h = -2, col="blue",lty=2)
+  abline(h =  2, col="blue",lty=2)
+}
+par(oldpar)
+```
+
+Most curves are fairly patternless with suprema well bounded by 2. However, `age` may violate the proportionality assumption. We then fit stratified PW model with `age` as stratification. We cut age `age` into 5 groups.
+
+```{r}
+age_group <- cut(gbc$age, breaks = c(0, 35, 45, 55, 65, Inf), right = FALSE)
+# Delete the original age column in the dataset.
+gbc_st <- gbc[,-5]
+strata <- age_group
+
+p      <- ncol(gbc_st)-3
+ID     <- gbc_st[, "id"]
+time   <- gbc_st[, "time"]
+status <- gbc_st[, "status"]
+Z      <- as.matrix(gbc_st[,4:(3+p)],nr,p)
+
+st.pwreg.obj <- pwreg(ID=ID,time=time,status=status, Z=Z,strata=strata,fixedL=TRUE)
+print(st.pwreg.obj)
+```
+
+Then, we can use `score.proc()` and plot the standardized score process after stratification:
+
+```{r, fig.height = 7.5, fig.width=7.5}
+st.score.obj <- score.proc(st.pwreg.obj)
+par(mfrow = c(3,3))
+for(i in c(1:p)){
+  plot(st.score.obj, k = i)
+  abline(h = -2, col="blue",lty=2)
+  abline(h =  2, col="blue",lty=2)
+}
+```
+
+
+## References
+
+Hosmer, D.W. and Lemeshow, S. and May, S. (2008) Applied Survival "Analysis: Regression Modeling of Time to Event Data: Second Edition", *John Wiley and Sons Inc.*, New York, NY
+
+Mao, L. and Wang, T. (2020). "A class of proportional win-fractions regression models for composite outcomes". *Biometrics*, 10.1111/biom.13382.
+
+Pocock, S., Ariti, C., Collier, T., and Wang, D. (2012). "The win ratio: a new approach
+to the analysis of composite endpoints in clinical trials based on clinical priorities". *European Heart Journal*, 33, 176--182.
+
+Sauerbrei, W., Royston, P., Bojar, H., Schmoor, C., & Schumacher, M. (1999). "Modelling the effects of standard prognostic factors in node-positive breast cancer. German Breast Cancer Study Group (GBSG)". *British journal of cancer*, 79(11-12), 1752–1760. 
+
+Wang, T. and Mao, L. (2021+). "Stratified Proportional Win-fractions Regression Analysis".
+

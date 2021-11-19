@@ -1,0 +1,21 @@
+Package: WR
+Type: Package
+Title: Win Ratio Analysis
+Version: 0.2.0
+Author: Lu Mao and Tuo Wang
+Maintainer: Lu Mao <lmao@biostat.wisc.edu>
+Description: Contains win-ratio analysis routines for prioritized composite time-to-event 
+    outcomes, e.g., death and non-fatal events. These routines include functions to fit 
+    the (stratified) proportional win-fractions (PW) model and to compute and plot the standardized 
+    score process to assess the proportionality assumption. 
+License: GPL (>=2)
+Encoding: UTF-8
+LazyData: true
+Depends: 
+  R (>= 3.5.0),
+  survival
+RoxygenNote: 7.1.2
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
